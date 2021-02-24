@@ -15,6 +15,7 @@ uses
   System.SysUtils, System.Variants, System.Classes,
 
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.Menus, Vcl.ExtCtrls,
+  Vcl.Clipbrd, Vcl.StdCtrls,
 
   PDFium.Frame;
 
@@ -54,6 +55,16 @@ type
     btFullPage: TPaintBox;
     btActualSize: TPaintBox;
     btAbout: TPaintBox;
+    Close1: TMenuItem;
+    btNext: TPaintBox;
+    btPrev: TPaintBox;
+    edPage: TEdit;
+    lbPages: TLabel;
+    shPage: TShape;
+    pnPages: TPanel;
+    Edit1: TMenuItem;
+    Copy1: TMenuItem;
+    btPrint: TPaintBox;
     procedure Open1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -71,11 +82,22 @@ type
     procedure PDFiumResize(Sender: TObject);
     procedure mnActualSizeClick(Sender: TObject);
     procedure btAboutClick(Sender: TObject);
+    procedure Quit1Click(Sender: TObject);
+    procedure Close1Click(Sender: TObject);
+    procedure pnPagesResize(Sender: TObject);
+    procedure btPrevClick(Sender: TObject);
+    procedure btNextClick(Sender: TObject);
+    procedure edPageExit(Sender: TObject);
+    procedure edPageKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure Copy1Click(Sender: TObject);
+    procedure btPrintClick(Sender: TObject);
   private
     { Déclarations privées }
     FButtons  : TBitmap;
     FFocus    : TPaintBox;
     procedure CreateButtons;
+    procedure LoadFile(const AFileName: string);
+    procedure OnPDFiumPaint(Sender: TObject);
   public
     { Déclarations publiques }
   end;
@@ -99,11 +121,22 @@ begin
   Application.Title := Caption;
   FButtons := TBitmap.Create;
   CreateButtons;
+  PDFium.OnPaint := OnPDFiumPaint;
+  if ParamCount = 1 then
+    LoadFile(ParamStr(1));
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   FButtons.Free;
+end;
+
+procedure TMainForm.LoadFile(const AFileName: string);
+begin
+  PDFium.LoadFromFile(AFileName);
+  PDFium.SetFocus();
+  Caption := ExtractFileName(AFileName) + ' - ' + Application.Title;
+  pnPages.Visible := PDFium.PageCount > 1;
 end;
 
 procedure TMainForm.MenuZoomClick(Sender: TObject);
@@ -148,6 +181,21 @@ end;
 procedure TMainForm.btAboutClick(Sender: TObject);
 begin
   ShellExecute(0, nil, 'http://www.execute.fr', nil, nil, SW_SHOW);
+end;
+
+procedure TMainForm.btNextClick(Sender: TObject);
+begin
+  PDFium.NextPage;
+end;
+
+procedure TMainForm.btPrevClick(Sender: TObject);
+begin
+  PDFium.PrevPage;
+end;
+
+procedure TMainForm.btPrintClick(Sender: TObject);
+begin
+  PDFium.Print();
 end;
 
 procedure TMainForm.btZPlusClick(Sender: TObject);
@@ -200,10 +248,20 @@ begin
   end;
 end;
 
+procedure TMainForm.Close1Click(Sender: TObject);
+begin
+  PDFium.CloseDocument;
+end;
+
+procedure TMainForm.Copy1Click(Sender: TObject);
+begin
+  Clipboard.AsText := PDFium.GetSelectionText;
+end;
+
 procedure TMainForm.CreateButtons;
 begin
   FButtons.PixelFormat := pf32Bit;
-  FButtons.SetSize(2 * 2 * 7 * 24, 2 * 24);
+  FButtons.SetSize(2 * 2 * 10 * 24, 2 * 24);
   with FButtons.Canvas do
   begin
     Brush.Color := clBtnFace;
@@ -224,6 +282,34 @@ begin
 //  FButtons.SaveToFile('BUTTONS24.BMP');
 end;
 
+procedure TMainForm.edPageExit(Sender: TObject);
+begin
+  edPage.Text := IntToStr(PDFium.PageIndex + 1);
+end;
+
+procedure TMainForm.edPageKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+var
+  Page: Integer;
+  Msg: TMsg;
+begin
+  if Key = VK_RETURN then
+  begin
+    if TryStrToInt(edPage.Text, Page) then
+    begin
+      PDFium.GoPage(Page - 1);
+    end;
+    Key := 0;
+    PeekMessage(Msg, 0, WM_CHAR, WM_CHAR, PM_REMOVE);
+  end;
+end;
+
+procedure TMainForm.OnPDFiumPaint(Sender: TObject);
+begin
+  edPage.Text := IntToStr(PDFium.PageIndex + 1);
+  lbPages.Caption := Format('(%d / %d)', [PDFium.PageIndex + 1, PDFium.PAgeCount]);
+end;
+
 procedure TMainForm.Open1Click(Sender: TObject);
 var
   Str: string;
@@ -231,9 +317,7 @@ begin
   Str := '';
   if PromptForFileName(Str, sPDFFiler, sPDFPrompt) then
   begin
-    PDFium.LoadFromFile(Str);
-    PDFium.SetFocus();
-    Caption := ExtractFileName(Str) + ' - ' + Application.Title;
+    LoadFile(Str);
   end;
 end;
 
@@ -287,6 +371,11 @@ begin
   pnButtons.Invalidate;
 end;
 
+procedure TMainForm.pnPagesResize(Sender: TObject);
+begin
+  shPAge.SetBounds(edPage.Left, edPage.Top + edPage.Height + 1, edPage.Width, 1);
+end;
+
 procedure TMainForm.ppZoomPopup(Sender: TObject);
 var
   Zoom : Integer;
@@ -300,6 +389,11 @@ begin
   mnActualSize.Checked := (PDFium.ZoomMode = zmCustom) and (Zoom = 10000);
   mnPageLevel.Checked := PDFium.ZoomMode = zmPageLevel;
   mnFitWidth.Checked := PDFium.ZoomMode = zmPageWidth;
+end;
+
+procedure TMainForm.Quit1Click(Sender: TObject);
+begin
+  Close();
 end;
 
 end.

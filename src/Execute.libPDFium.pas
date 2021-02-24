@@ -1,17 +1,22 @@
 unit Execute.libPDFium;
 
 {
-   libPDFium.dll (c)2017-2018 by Execute SARL
+   libPDFium.dll (c)2017-2020 by Execute SARL
    http://www.execute.fr
    https://github.com/tothpaul/PDFiumReader
 }
+{$WARN SYMBOL_PLATFORM OFF}
 
 
 interface
 
 uses
   Winapi.Windows,
-  Winapi.ActiveX;
+  Winapi.ActiveX,
+  System.Math;
+
+const
+  PDFIUM_VERSION = 2;
 
 type
   // One point is 1/72 inch (around 0.3528 mm).
@@ -51,6 +56,7 @@ type
     function GetText(var Text: IPDFText): Integer; stdcall;
     procedure DeviceToPage(const Rect: TRect; x, y: Integer; var px, py: Double); stdcall;
     procedure PageToDevice(const Rect: TRect; px, py: Double; var x, y: Integer); stdcall;
+    function GetRotation: Integer; stdcall;
   end;
 
   TWriteProc = function(Data: Pointer; Size: Integer; UserData: Pointer): Integer; stdcall;
@@ -58,6 +64,7 @@ type
   IPDFium = interface
     function GetVersion: Integer; stdcall;
     function GetError: Integer; stdcall;
+    function CloseDocument: integer; stdcall;
     function LoadFromFile(fileName, Password: PAnsiChar): Integer; stdcall;
     function LoadFromMemory(data: Pointer; Size: Integer; password: PAnsiChar): Integer; stdcall;
     function GetPermissions: LongWord; stdcall;
@@ -69,7 +76,11 @@ type
   end;
 
 const
+{$IFDEF WIN64}
+  libpdfium = 'libpdfiumx64.dll';
+{$ELSE}
   libpdfium = 'libpdfium.dll';
+{$ENDIF}
 
   FPDF_ERR_SUCCESS  = 0;    // No error.
   FPDF_ERR_UNKNOWN  = 1;    // Unknown error.
@@ -128,4 +139,8 @@ function PDF_Create(RequestedVersion: Integer; out PDF: IPDFium): Integer; stdca
 
 implementation
 
+{$IFDEF WIN64}
+initialization
+  SetExceptionMask(exAllArithmeticExceptions);
+{$ENDIF}
 end.

@@ -4,6 +4,7 @@
 #include "public/fpdf_annot.h"
 #include "public/fpdf_text.h"
 #include "public/fpdf_save.h"
+#include "public/fpdf_edit.h"
 
 #include "libpdfium.h"
 
@@ -12,13 +13,22 @@
 //#define TRACE
 #ifdef TRACE
 #include <stdio.h>
-HANDLE console;
 DWORD wOut;
-#define CONSOLE console = GetStdHandle(STD_OUTPUT_HANDLE);
-#define LOG(s) WriteConsoleA(console, s, strlen(s), &wOut, 0);
-#define REF(i) if (!i || !*i || (i != &(*i)->Reference)) LOG("Invalid Interface !!!\n")
+#define LOG(s)                                                              \
+  {                                                                         \
+    AllocConsole();                                                         \
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), s, strlen(s), &wOut, 0); \
+  }
+#define REF(i)                                      \
+  if (i == 0 /*|| !*i || (*i != (*i)->Reference)*/) \
+    LOG("NULL Interface !!!\n")                     \
+  if (*i == 0)                                      \
+    LOG("NULL Reference !!!\n")                     \
+  if (*i != (*i)->Reference)                        \
+    LOG("INVALID Reference\n")                      \
+  if (!(*i)->Handle)                                \
+  LOG("INVALID HANDLE\n")
 #else
-#define CONSOLE
 #define LOG(s)
 #define REF(i)
 #endif
@@ -43,7 +53,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 
 // dummy QueryInterface
 
-int __stdcall QueryInterface(void *self, void *rrid, void *out) {
+int WINAPI QueryInterface(void *self, void *rrid, void *out) {
   LOG("QueryInterface\n")
   return 0x80004001; // E_NOTIMPL
 }
@@ -62,7 +72,7 @@ int WINAPI PDFText_Free(IPDFText text);
 
 // IPDFAnnotation
 
-int __stdcall PDFAnnotation_AddRef(IPDFAnnotation annotation) {
+int WINAPI PDFAnnotation_AddRef(IPDFAnnotation annotation) {
   LOG("PDFAnnotation_AddRef\n")
   REF(annotation)
   return ++(*annotation)->RefCount;
@@ -83,31 +93,31 @@ int WINAPI PDFAnnotation_Free(IPDFAnnotation annotation) {
 }
 
 int WINAPI PDFAnnotation_GetSubtype(IPDFAnnotation annotation) {
-  LOG("PDFAnnotation_GetSubtype")
+  LOG("PDFAnnotation_GetSubtype\n")
   REF(annotation)
   return FPDFAnnot_GetSubtype((*annotation)->Handle);
 }
 
 int WINAPI PDFAnnotation_GetRect(IPDFAnnotation annotation, TRectF *rect) {
-  LOG("PDFAnnotation_GetRect")
+  LOG("PDFAnnotation_GetRect\n")
   REF(annotation)
   return FPDFAnnot_GetRect((*annotation)->Handle, (FS_LPRECTF)rect);
 }
 
 int WINAPI PDFAnnotation_SetRect(IPDFAnnotation annotation, TRectF *rect) {
-  LOG("PDFAnnotation_SetRect")
+  LOG("PDFAnnotation_SetRect\n")
   REF(annotation)
   return FPDFAnnot_SetRect((*annotation)->Handle, (FS_LPRECTF)rect);
 }
 
-int WINAPI PDFAnnotation_GetString(IPDFAnnotation annotation, char *key, char *str, int size) {
-  LOG("PDFAnnotation_GetString")
+int WINAPI PDFAnnotation_GetString(IPDFAnnotation annotation, const char *key, char *str, int size) {
+  LOG("PDFAnnotation_GetString\n")
   REF(annotation)
-  return FPDFAnnot_GetStringValue((*annotation)->Handle, key, str, size);
+  return FPDFAnnot_GetStringValue((*annotation)->Handle, key, (unsigned short *)str, size);
 }
 
 int WINAPI PDFAnnotation_Remove(IPDFAnnotation annotation) {
-  LOG("PDFAnnotation_Remove")
+  LOG("PDFAnnotation_Remove\n")
   REF(annotation)
   if (!(*annotation)->Handle) return 0;
   FPDFPage_CloseAnnot((*annotation)->Handle);
@@ -117,7 +127,7 @@ int WINAPI PDFAnnotation_Remove(IPDFAnnotation annotation) {
 
 // IPDFText
 
-int _stdcall PDFText_AddRef(IPDFText text) {
+int WINAPI PDFText_AddRef(IPDFText text) {
   LOG("PDFText_AddRef\n")
   REF(text)
   return ++(*text)->RefCount;
@@ -163,7 +173,7 @@ int WINAPI PDFText_GetRect(IPDFText text, int Index, TRectD *rect) {
 
 // IPDFPage
 
-int __stdcall PDFPage_AddRef(IPDFPage page) {
+int WINAPI PDFPage_AddRef(IPDFPage page) {
   LOG("PDFPage_AddRef\n")
   REF(page)
   return ++(*page)->RefCount;
@@ -268,6 +278,12 @@ void WINAPI PDFPage_PageToDevice(IPDFPage page, TRect *rect, double px, double p
   FPDF_PageToDevice((*page)->Handle, rect->Left, rect->Top, rect->Right - rect->Left, rect->Bottom - rect->Top, 0, px, py, x, y);
 }
 
+int WINAPI PDFPage_GetRotation(IPDFPage page) {
+  LOG("PDFPage_GetRotation\n")
+  REF(page)
+  return FPDFPage_GetRotation((*page)->Handle);
+}
+
 // IPDFium
 
 int __stdcall PDF_AddRef(IPDFium pdf) {
@@ -298,7 +314,15 @@ int WINAPI PDF_GetVersion(IPDFium pdf) {
 int WINAPI PDF_GetError(IPDFium pdf) {
   LOG("PDF_GetError\n")
   REF(pdf)
-  return (int)FPDF_GetLastError;
+  return (int)FPDF_GetLastError();
+}
+
+int WINAPI PDF_CloseDocument(IPDFium pdf) {
+  LOG("PDF_CloseDocument\n")
+  REF(pdf)
+  if ((*pdf)->Handle) FPDF_CloseDocument((*pdf)->Handle);
+  (*pdf)->Handle = 0;
+  return 0;
 }
 
 int WINAPI PDF_LoadFromFile(IPDFium pdf, char* filename, char* pwd) {
@@ -306,7 +330,7 @@ int WINAPI PDF_LoadFromFile(IPDFium pdf, char* filename, char* pwd) {
   REF(pdf)
   if ((*pdf)->Handle) FPDF_CloseDocument((*pdf)->Handle);
   (*pdf)->Handle = FPDF_LoadDocument(filename, pwd);
-  return (*pdf)->Handle ? 0 : (int)FPDF_GetLastError;
+  return (*pdf)->Handle ? 0 : (int)FPDF_GetLastError();
 }
 
 int WINAPI PDF_LoadFromMemory(IPDFium pdf, void* data, int size, char* pwd) {
@@ -314,7 +338,7 @@ int WINAPI PDF_LoadFromMemory(IPDFium pdf, void* data, int size, char* pwd) {
   REF(pdf)	
   if ((*pdf)->Handle) FPDF_CloseDocument((*pdf)->Handle);
   (*pdf)->Handle = FPDF_LoadMemDocument(data, size, pwd);
-  return (*pdf)->Handle ? 0 : (int)FPDF_GetLastError;
+  return (*pdf)->Handle ? 0 : (int)FPDF_GetLastError();
 }
 
 long WINAPI PDF_GetPermissions(IPDFium pdf) {
@@ -359,6 +383,7 @@ int WINAPI PDF_GetPage(IPDFium pdf, int page_index, IPDFPage* page) {
     PDFPage->GetText = PDFPage_GetText;
     PDFPage->DeviveToPage = PDFPage_DeviveToPage;
     PDFPage->PageToDevice = PDFPage_PageToDevice;
+		PDFPage->GetRotation = PDFPage_GetRotation;
   // Result
     *page = &PDFPage->Reference;
     return 0;
@@ -386,8 +411,9 @@ int WINAPI PDF_SaveToStream(IPDFium pdf, IStream stream) {
   WS.FW.version = 1;
   WS.FW.WriteBlock = WriteStream;
   WS.Stream = stream;
-  return FPDF_SaveAsCopy((*pdf)->Handle, &WS.FW, 0);
+  int ret = FPDF_SaveAsCopy((*pdf)->Handle, &WS.FW, 0);
   (*stream)->Release(stream);
+  return ret;
 }
 
 typedef struct {
@@ -414,9 +440,8 @@ int WINAPI PDF_SaveToProc(IPDFium pdf, TWriteProc writeProc, void *userData) {
 int initialized = 0;
 
 int WINAPI PDF_Create(int RequestedVersion, IPDFium* pdf) {
-  CONSOLE;
   LOG("PDF_Create\n")
-  if (RequestedVersion != 1) return -1;
+  if (RequestedVersion != PDFIUM_VERSION) return -1;
   if (!initialized) {
     LOG("Initialization\n")
     initialized = 1;
@@ -437,6 +462,7 @@ int WINAPI PDF_Create(int RequestedVersion, IPDFium* pdf) {
   // IPDFInterface
   PDF->GetVersion = PDF_GetVersion;
   PDF->GetError = PDF_GetError;
+  PDF->CloseDocument = PDF_CloseDocument;
   PDF->LoadFromFile = PDF_LoadFromFile;
   PDF->LoadFromMemory = PDF_LoadFromMemory;
   PDF->GetPermissions = PDF_GetPermissions;

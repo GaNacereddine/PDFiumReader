@@ -1,8 +1,8 @@
-# libPDFium (c)2018 Execute SARL
+# libPDFium (c)2018-2020 Execute SARL
 
 A PDFium Library designed for Delphi, by a Delphi developper.
 
-it's a x86 Windows library that can be used by any langage afterall
+it's a x86/x64 Windows library that can be used by any langage afterall
 
 to get a IPDFium object, just call
 ```
@@ -24,13 +24,17 @@ I'm not a C developper, if you need a libpdfium.lib, sorry you'll have to do it 
 
 I know, libpdfium.h exposes the internal members of my objects, but it's not my purpose to use this library from a C project, only from a Delphi one, so I don't care.
 
-BTW if you know how to add a version.rc file to this project, let me know :)
+I've found how to install rc.exe so I can compile libpdfium.rc !
+````
+ third_party/depot_tools/download_from_google_storage.bat -s build/toolchain/win/rc/win/rc.exe.sha1 --bucket chromium-browser-clang/rc
+````
 
 ## Requirements to recompile libPDFium
 install [depot_tools](https://www.chromium.org/developers/how-tos/depottools)
 ````
  set path=%path%;<depot_tools_directory>
  set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+ set GCLIENT_PY3=0
 ````
 download PDFium source code
 ````
@@ -66,6 +70,9 @@ group("pdfium_all") {
  gn gen out --ide=vs
 ````
 copy "out/args.gn" into "pdfium/out/args.gn"
+
+you can change options in args.gn (debug/release, x86/x64), then
+
 ```` 
  gn gen out --ide=vs
  ninja -C out libpdfium
